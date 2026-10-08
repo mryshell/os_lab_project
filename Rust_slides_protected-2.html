@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ارائه سیستم‌های عامل بر پایه Rust</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        rust: {
+                            500: '#f97316',
+                            600: '#ea580c',
+                            700: '#c2410c'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Vazirmatn Persian Font -->
+    <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet" type="text/css" />
+    
+    <style>
+        * {
+            box-sizing: border-box;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: 'Vazirmatn', -apple-system, BlinkMacSystemFont, sans-serif;
+            user-select: none;
+            overflow: hidden;
+            transition: background-color 0.4s cubic-bezier(0.16, 1, 0.3, 1), color 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+            height: 100dvh;
+            width: 100vw;
+        }
+
+        /* Particle Canvas background */
+        #particle-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        /* Apple-style Fluid Slide Transitions */
+        .slide {
+            display: none;
+            opacity: 0;
+            transform: scale(0.92) translateY(30px);
+            filter: blur(12px);
+            transition: all 0.6s cubic-bezier(0.32, 0.72, 0, 1);
+        }
+
+        .slide.active {
+            display: flex;
+            opacity: 1;
+            transform: scale(1) translateY(0);
+            filter: blur(0px);
+        }
+
+        /* Apple-style staggered items entrance */
+        .animate-item {
+            opacity: 0;
+            will-change: opacity, transform, filter;
+        }
+
+        .slide.active .animate-item {
+            animation: appleSpringIn 0.7s cubic-bezier(0.32, 0.72, 0, 1) both;
+        }
+
+        @keyframes appleSpringIn {
+            0% {
+                opacity: 0;
+                transform: translateY(25px) scale(0.94);
+                filter: blur(10px);
+            }
+            100% {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+                filter: blur(0px);
+            }
+        }
+
+        /* Dynamic Stagger Delays for subtle layer effect */
+        .slide.active .delay-1 { animation-delay: 0.06s; }
+        .slide.active .delay-2 { animation-delay: 0.16s; }
+        .slide.active .delay-3 { animation-delay: 0.26s; }
+        .slide.active .delay-4 { animation-delay: 0.36s; }
+
+        /* Glassmorphism Cards with strict Light/Dark contrast */
+        .glass-card {
+            backdrop-filter: blur(20px) saturate(180%);
+            -webkit-backdrop-filter: blur(20px) saturate(180%);
+            transition: background-color 0.4s ease, border-color 0.4s ease, box-shadow 0.4s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .glass-card:hover {
+            transform: translateY(-2px);
+        }
+
+        /* Dark Theme Styling */
+        .dark .glass-card {
+            background: rgba(15, 23, 42, 0.85);
+            border: 1.5px solid rgba(255, 255, 255, 0.14);
+            box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.7);
+        }
+
+        /* Light Theme Styling - Super crisp for projectors */
+        html:not(.dark) .glass-card {
+            background: rgba(255, 255, 255, 0.92);
+            border: 1.5px solid rgba(15, 23, 42, 0.18);
+            box-shadow: 0 12px 30px -5px rgba(0, 0, 0, 0.12);
+        }
+
+        .rust-glow {
+            box-shadow: 0 0 35px 2px rgba(234, 88, 12, 0.3);
+        }
+
+        /* Custom Scrollbar for small mobile viewports */
+        .slide-scroll::-webkit-scrollbar {
+            width: 4px;
+        }
+        .slide-scroll::-webkit-scrollbar-thumb {
+            background: #f97316;
+            border-radius: 4px;
+        }
+
+        /* iOS-style Dynamic Zoom Popup from Button */
+        .ios-popup {
+            opacity: 0;
+            pointer-events: none;
+            transform: translate(-50%, 0) scale(0.05);
+            filter: blur(20px);
+            transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.35s ease, filter 0.35s ease;
+            will-change: transform, opacity, filter;
+        }
+
+        .ios-popup.active {
+            opacity: 1;
+            pointer-events: auto;
+            transform: translate(-50%, 0) scale(1);
+            filter: blur(0px);
+        }
+        /* Password modal (site design) */
+        #pass-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 50;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: rgba(2, 6, 23, 0.55);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+        }
+        #pass-modal.open {
+            display: flex;
+        }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-100 h-screen w-screen relative flex flex-col justify-between overflow-hidden">
+
+    <canvas id="particle-canvas"></canvas>
+
+    <header class="w-full px-3 sm:px-6 py-2.5 sm:py-3.5 flex justify-between items-center z-20 border-b border-slate-300 dark:border-slate-800/80 bg-white/90 dark:bg-slate-950/80 backdrop-blur-xl shrink-0">
+        <div class="flex items-center gap-2 sm:gap-3">
+            <div class="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-orange-600 to-amber-500 flex items-center justify-center text-white shadow-lg shadow-orange-500/25 shrink-0">
+                <!-- Inline SVG: CPU -->
+                <svg class="w-4 h-4 sm:w-6 sm:h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect>
+                    <rect x="9" y="9" width="6" height="6"></rect>
+                    <line x1="9" y1="1" x2="9" y2="4"></line>
+                    <line x1="15" y1="1" x2="15" y2="4"></line>
+                    <line x1="9" y1="20" x2="9" y2="23"></line>
+                    <line x1="15" y1="20" x2="15" y2="23"></line>
+                    <line x1="20" y1="9" x2="23" y2="9"></line>
+                    <line x1="20" y1="15" x2="23" y2="15"></line>
+                    <line x1="1" y1="9" x2="4" y2="9"></line>
+                    <line x1="1" y1="15" x2="4" y2="15"></line>
+                </svg>
+            </div>
+            <div>
+                <h1 class="text-xs sm:text-base font-black text-slate-900 dark:text-slate-100 tracking-wide leading-tight">آزمایشگاه سیستم‌های عامل</h1>
+                <p class="text-[10px] sm:text-xs font-black text-orange-600 dark:text-orange-400">ارائه زبان Rust و آینده سیستم‌های عامل</p>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-1.5 sm:gap-3">
+            <!-- Theme Toggle Button -->
+            <button onclick="toggleTheme()" class="px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-100 text-xs font-black transition-all flex items-center gap-1.5 border border-slate-300 dark:border-slate-700" title="تغییر تم">
+                <!-- Inline SVG: Sun / Moon container -->
+                <span id="theme-icon-container" class="w-4 h-4 text-amber-500 flex items-center justify-center">
+                    <!-- Sun SVG -->
+                    <svg id="sun-icon" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="5"></circle>
+                        <line x1="12" y1="1" x2="12" y2="3"></line>
+                        <line x1="12" y1="21" x2="12" y2="23"></line>
+                        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                        <line x1="1" y1="12" x2="3" y2="12"></line>
+                        <line x1="21" y1="12" x2="23" y2="12"></line>
+                        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                    </svg>
+                    <!-- Moon SVG (hidden initially in dark mode) -->
+                    <svg id="moon-icon" class="w-4 h-4 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                    </svg>
+                </span>
+                <span id="theme-text" class="hidden md:inline font-black text-xs">حالت روز</span>
+            </button>
+
+            <!-- Slide Counter Badge -->
+            <span id="slide-counter" class="text-[11px] sm:text-xs font-black px-2.5 py-1.5 sm:px-4 sm:py-2 rounded-xl bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-orange-600 dark:text-orange-400 shrink-0">
+                ۱ از ۶
+            </span>
+
+            <!-- Fullscreen Button -->
+            <button onclick="toggleFullScreen()" class="p-1.5 sm:p-2.5 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 transition-all border border-slate-300 dark:border-slate-700" title="تمام‌صفحه">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+                </svg>
+            </button>
+        </div>
+    </header>
+
+    <!-- Progress Bar -->
+    <div class="w-full bg-slate-300 dark:bg-slate-800 h-1.5 z-20 shrink-0">
+        <div id="progress-bar" class="bg-gradient-to-r from-orange-500 via-amber-400 to-yellow-400 h-full w-1/6 transition-all duration-500 ease-out shadow-sm shadow-orange-500/50"></div>
+    </div>
+
+    <main class="flex-1 relative flex items-center justify-center p-3 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full z-10 overflow-y-auto slide-scroll">
+
+        <!-- SLIDE 1: Title -->
+        <div class="slide active flex-col items-center justify-center text-center w-full max-w-4xl my-auto space-y-4 sm:space-y-6 py-2">
+            <div class="animate-item delay-1 inline-flex items-center gap-2 px-3.5 py-1.5 sm:px-5 sm:py-2 rounded-full bg-orange-500/10 dark:bg-orange-500/20 border border-orange-500/40 text-orange-600 dark:text-orange-400 text-xs sm:text-sm font-black">
+                <!-- Inline SVG: Shield Check -->
+                <svg class="w-4 h-4 sm:w-5 sm:h-5 text-orange-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                    <path d="m9 12 2 2 4-4"></path>
+                </svg>
+                آینده امنیت و کارایی سیستم‌های عامل
+            </div>
+            
+            <h1 class="animate-item delay-2 text-2xl sm:text-4xl md:text-5xl lg:text-6xl font-black leading-snug sm:leading-tight text-slate-900 dark:text-white">
+                انقلاب در سیستم‌های عامل:<br/>
+                <span class="text-transparent bg-clip-text bg-gradient-to-r from-orange-600 via-amber-600 to-yellow-500 dark:from-orange-400 dark:via-amber-400 dark:to-yellow-300 font-black">چرا آینده بدون C نوشته می‌شود؟</span>
+            </h1>
+            
+            <p class="animate-item delay-3 text-slate-800 dark:text-slate-200 text-sm sm:text-lg md:text-xl font-bold max-w-2xl leading-relaxed">
+                بررسی نقش زبان Rust و الگوی Memory Safety در ساخت نسل جدید کرنل‌های ایمن، سریع و بدون کرش.
+            </p>
+            
+            <div class="animate-item delay-4 grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-5 w-full max-w-3xl pt-2 sm:pt-4">
+                <div class="glass-card p-3.5 sm:p-5 rounded-2xl text-center border-t-4 border-t-orange-500">
+                    <p class="text-orange-600 dark:text-orange-400 font-black text-2xl sm:text-4xl">٪۷۰+</p>
+                    <p class="text-slate-900 dark:text-slate-100 font-black text-xs sm:text-sm mt-1">کاهش باگ‌های حافظه</p>
+                </div>
+                <div class="glass-card p-3.5 sm:p-5 rounded-2xl text-center border-t-4 border-t-amber-500">
+                    <p class="text-amber-600 dark:text-amber-400 font-black text-2xl sm:text-4xl">صفر</p>
+                    <p class="text-slate-900 dark:text-slate-100 font-black text-xs sm:text-sm mt-1">افت سرعت (Zero-Cost)</p>
+                </div>
+                <div class="glass-card p-3.5 sm:p-5 rounded-2xl text-center border-t-4 border-t-emerald-500">
+                    <p class="text-emerald-600 dark:text-emerald-400 font-black text-2xl sm:text-4xl">Linux 6.1</p>
+                    <p class="text-slate-900 dark:text-slate-100 font-black text-xs sm:text-sm mt-1">ورود رسمی به لینوکس</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- SLIDE 2: The C Problem -->
+        <div class="slide flex-col justify-center w-full my-auto space-y-4 sm:space-y-6 py-2">
+            <div class="animate-item delay-1 border-r-6 sm:border-r-8 border-red-500 pr-3 sm:pr-5">
+                <span class="text-red-600 dark:text-red-400 text-xs sm:text-sm font-black uppercase tracking-wider">ریشه چالش</span>
+                <h2 class="text-xl sm:text-3xl md:text-4xl font-black text-slate-900 dark:text-white mt-1">غول ۵۰ ساله: نقطه ضعف زبان C چیست؟</h2>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+                <div class="animate-item delay-2 glass-card p-4 sm:p-6 rounded-2xl sm:rounded-3xl border-r-4 border-r-emerald-500">
+                    <div class="flex items-center gap-3 mb-3 sm:mb-4">
+                        <div class="p-2.5 sm:p-3 bg-emerald-500/20 rounded-xl sm:rounded-2xl text-emerald-600 dark:text-emerald-400 font-bold shrink-0">
+                            <!-- Inline SVG: Zap -->
+                            <svg class="w-5 h-5 sm:w-7 sm:h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                            </svg>
+                        </div>
+                        <h3 class="text-lg sm:text-2xl font-black text-slate-900 dark:text-white">چرا C همیشه انتخاب اول بود؟</h3>
+                    </div>
+                    <ul class="space-y-2.5 sm:space-y-3 text-slate-900 dark:text-slate-100 text-xs sm:text-base font-bold">
+                        <li class="flex items-center gap-2 sm:gap-3">
+                            <svg class="w-4 h-4 sm:w-5 sm:h-5 text-emerald-600 dark:text-emerald-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                            سرعت فوق‌العاده و نزدیکی مستقیم به سخت‌افزار
+                        </li>
+                        <li class="flex items-center gap-2 sm:gap-3">
+                            <svg class="w-4 h-4 sm:w-5 sm:h-5 text-emerald-600 dark:text-emerald-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                            دسترسی بدون واسطه و سریع به RAM
+                        </li>
+                        <li class="flex items-center gap-2 sm:gap-3">
+                            <svg class="w-4 h-4 sm:w-5 sm:h-5 text-emerald-600 dark:text-emerald-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                            عدم وجود لایه‌های سنگین مثل Garbage Collector
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="animate-item delay-3 glass-card p-4 sm:p-6 rounded-2xl sm:rounded-3xl border-r-4 border-r-red-500">
+                    <div class="flex items-center gap-3 mb-3 sm:mb-4">
+                        <div class="p-2.5 sm:p-3 bg-red-500/20 rounded-xl sm:rounded-2xl text-red-600 dark:text-red-400 font-bold shrink-0">
+                            <!-- Inline SVG: Alert Triangle -->
+                            <svg class="w-5 h-5 sm:w-7 sm:h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path>
+                                <line x1="12" y1="9" x2="12" y2="13"></line>
+                                <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                            </svg>
+                        </div>
+                        <h3 class="text-lg sm:text-2xl font-black text-slate-900 dark:text-white">مشکل بزرگ: مدیریت دستی حافظه</h3>
+                    </div>
+                    <ul class="space-y-2.5 sm:space-y-3 text-slate-900 dark:text-slate-100 text-xs sm:text-base font-bold">
+                        <li class="flex items-center gap-2 sm:gap-3">
+                            <svg class="w-4 h-4 sm:w-5 sm:h-5 text-red-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+                            برنامه‌نویس باید خودش حافظه را تخصیص و آزاد کند
+                        </li>
+                        <li class="flex items-center gap-2 sm:gap-3">
+                            <svg class="w-4 h-4 sm:w-5 sm:h-5 text-red-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+                            انسان جایزالخطاست 👈 وقوع خطاهای شدید امنیتی
+                        </li>
+                        <li class="flex items-center gap-2 sm:gap-3">
+                            <svg class="w-4 h-4 sm:w-5 sm:h-5 text-red-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+                            باگ‌های معروف: Buffer Overflow و Use-After-Free
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- SLIDE 3: Statistics -->
+        <div class="slide flex-col justify-center w-full my-auto space-y-4 sm:space-y-6 py-2">
+            <div class="animate-item delay-1 border-r-6 sm:border-r-8 border-amber-500 pr-3 sm:pr-5">
+                <span class="text-amber-600 dark:text-amber-400 text-xs sm:text-sm font-black uppercase tracking-wider">واقعیت‌های عددی</span>
+                <h2 class="text-xl sm:text-3xl md:text-4xl font-black text-slate-900 dark:text-white mt-1">آمار فاجعه: ۷۰ درصد آسیب‌پذیری‌های امنیتی!</h2>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+                <div class="animate-item delay-2 glass-card p-5 sm:p-7 rounded-2xl sm:rounded-3xl rust-glow border-t-4 border-t-orange-500">
+                    <div class="flex justify-between items-center">
+                        <span class="text-slate-900 dark:text-slate-100 text-xs sm:text-sm font-black">گزارش رسمی مایکروسافت</span>
+                        <!-- Inline SVG: Shield Alert -->
+                        <svg class="text-orange-600 dark:text-orange-400 w-6 h-6 sm:w-8 sm:h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                            <line x1="12" y1="8" x2="12" y2="12"></line>
+                            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                        </svg>
+                    </div>
+                    <p class="text-4xl sm:text-6xl font-black text-orange-600 dark:text-orange-400 my-3 sm:my-5">۷۰٪</p>
+                    <p class="text-slate-900 dark:text-slate-100 text-xs sm:text-base font-bold leading-relaxed">
+                        از تمامی آسیب‌پذیری‌های امنیتی سالانه ویندوز مربوط به مدیریت نادرست حافظه در کدهای C/C++ است.
+                    </p>
+                </div>
+
+                <div class="animate-item delay-3 glass-card p-5 sm:p-7 rounded-2xl sm:rounded-3xl border-t-4 border-t-amber-500">
+                    <div class="flex justify-between items-center">
+                        <span class="text-slate-900 dark:text-slate-100 text-xs sm:text-sm font-black">پروژه کرومیوم و آندروید (Google)</span>
+                        <!-- Inline SVG: Chrome -->
+                        <svg class="text-amber-600 dark:text-amber-400 w-6 h-6 sm:w-8 sm:h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <circle cx="12" cy="12" r="4"></circle>
+                            <line x1="21.17" y1="8" x2="12" y2="8"></line>
+                            <line x1="3.95" y1="6.06" x2="8.54" y2="14"></line>
+                            <line x1="10.88" y1="21.94" x2="15.46" y2="14"></line>
+                        </svg>
+                    </div>
+                    <p class="text-4xl sm:text-6xl font-black text-amber-600 dark:text-amber-400 my-3 sm:my-5">۷۰٪+</p>
+                    <p class="text-slate-900 dark:text-slate-100 text-xs sm:text-base font-bold leading-relaxed">
+                        بیش از ۷۰ درصد باگ‌های با درجه اهمیت حیاتی (Critical) در کدهای گوگل، ریشه در مشکلات امنیتی حافظه دارند.
+                    </p>
+                </div>
+            </div>
+
+            <div class="animate-item delay-4 glass-card p-3.5 sm:p-4 rounded-xl sm:rounded-2xl border border-orange-500/40 text-center text-slate-900 dark:text-slate-100 text-xs sm:text-base font-black">
+                💡 <strong class="text-orange-600 dark:text-orange-400">نتیجه:</strong> حتی با‌‌تجربه‌ترین مهندسان جهان هم نمی‌‌توانند کد C بدون باگ حافظه بنویسند. راه‌حل در تغییر ابزار است!
+            </div>
+        </div>
+
+        <!-- SLIDE 4: Rust Solution -->
+        <div class="slide flex-col justify-center w-full my-auto space-y-4 sm:space-y-6 py-2">
+            <div class="animate-item delay-1 border-r-6 sm:border-r-8 border-orange-500 pr-3 sm:pr-5">
+                <span class="text-orange-600 dark:text-orange-400 text-xs sm:text-sm font-black uppercase tracking-wider">فرشته نجات</span>
+                <h2 class="text-xl sm:text-3xl md:text-4xl font-black text-slate-900 dark:text-white mt-1">زبان Rust چطور مشکل را حل می‌کند؟</h2>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
+                <div class="animate-item delay-2 glass-card p-4 sm:p-6 rounded-2xl sm:rounded-3xl border-t-4 border-t-orange-500">
+                    <div class="w-10 h-10 sm:w-12 sm:h-12 bg-orange-500/20 rounded-xl sm:rounded-2xl flex items-center justify-center text-orange-600 dark:text-orange-400 mb-3 sm:mb-4 shrink-0">
+                        <!-- Inline SVG: Key -->
+                        <svg class="w-5 h-5 sm:w-7 sm:h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="m21 2-2 2m-1.5 1.5L14 9.08a6 6 0 1 0 4.24 4.24l3.34-3.34a2 2 0 0 0 0-2.83l-2.83-2.83a2 2 0 0 0-2.83 0Z"></path>
+                            <circle cx="7.5" cy="16.5" r="1.5"></circle>
+                        </svg>
+                    </div>
+                    <h3 class="text-base sm:text-xl font-black text-slate-900 dark:text-white mb-2">سیستم Ownership</h3>
+                    <p class="text-slate-900 dark:text-slate-100 text-xs sm:text-sm font-bold leading-relaxed">
+                        هر داده در حافظه فقط یک «مالک» دارد. وقتی مالک خارج شود، حافظه فوراً و خودکار پاک می‌شود.
+                    </p>
+                </div>
+
+                <div class="animate-item delay-3 glass-card p-4 sm:p-6 rounded-2xl sm:rounded-3xl border-t-4 border-t-amber-500">
+                    <div class="w-10 h-10 sm:w-12 sm:h-12 bg-amber-500/20 rounded-xl sm:rounded-2xl flex items-center justify-center text-amber-600 dark:text-amber-400 mb-3 sm:mb-4 shrink-0">
+                        <!-- Inline SVG: Binary -->
+                        <svg class="w-5 h-5 sm:w-7 sm:h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="14" y="4" width="4" height="6" rx="2"></rect>
+                            <rect x="6" y="14" width="4" height="6" rx="2"></rect>
+                            <path d="M6 4h4v6H6z"></path>
+                            <path d="M14 14h4v6h-4z"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-base sm:text-xl font-black text-slate-900 dark:text-white mb-2">بررسی در زمان کامپایل</h3>
+                    <p class="text-slate-900 dark:text-slate-100 text-xs sm:text-sm font-bold leading-relaxed">
+                        جادوی اصلی Rust! تمام خطاهای حافظه قبل از اجرای برنامه و در کامپایلر شناسایی و متوقف می‌شوند.
+                    </p>
+                </div>
+
+                <div class="animate-item delay-4 glass-card p-4 sm:p-6 rounded-2xl sm:rounded-3xl border-t-4 border-t-emerald-500 sm:col-span-2 md:col-span-1">
+                    <div class="w-10 h-10 sm:w-12 sm:h-12 bg-emerald-500/20 rounded-xl sm:rounded-2xl flex items-center justify-center text-emerald-600 dark:text-emerald-400 mb-3 sm:mb-4 shrink-0">
+                        <!-- Inline SVG: Gauge -->
+                        <svg class="w-5 h-5 sm:w-7 sm:h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="m12 14 4-4"></path>
+                            <path d="M3.34 19a10 10 0 1 1 17.32 0"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-base sm:text-xl font-black text-slate-900 dark:text-white mb-2">بدون Garbage Collector</h3>
+                    <p class="text-slate-900 dark:text-slate-100 text-xs sm:text-sm font-bold leading-relaxed">
+                        برخلاف جاوا یا پایتون، Rust هیچ لایه اضافی اسکن رم ندارد؛ بنابراین سرعت آن کاملاً با C برابری می‌کند.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- SLIDE 5: Real World Projects -->
+        <div class="slide flex-col justify-center w-full my-auto space-y-4 sm:space-y-6 py-2">
+            <div class="animate-item delay-1 border-r-6 sm:border-r-8 border-cyan-500 pr-3 sm:pr-5">
+                <span class="text-cyan-600 dark:text-cyan-400 text-xs sm:text-sm font-black uppercase tracking-wider">از تئوری تا عمل</span>
+                <h2 class="text-xl sm:text-3xl md:text-4xl font-black text-slate-900 dark:text-white mt-1">پروژه‌های واقعی: چه کسانی کوچ کرده‌اند؟</h2>
+            </div>
+
+            <div class="space-y-3 sm:space-y-4">
+                <div class="animate-item delay-2 glass-card p-3.5 sm:p-5 rounded-2xl flex items-center gap-3 sm:gap-5 border-r-6 border-r-amber-500">
+                    <div class="p-2.5 sm:p-3.5 bg-slate-200 dark:bg-slate-800 rounded-xl text-amber-600 dark:text-amber-400 shrink-0">
+                        <!-- Inline SVG: Terminal -->
+                        <svg class="w-6 h-6 sm:w-7 sm:h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="4 17 10 11 4 5"></polyline>
+                            <line x1="12" y1="19" x2="20" y2="19"></line>
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 class="text-sm sm:text-lg font-black text-slate-900 dark:text-white">هسته لینوکس (Linux Kernel 6.1)</h3>
+                        <p class="text-slate-900 dark:text-slate-100 text-xs sm:text-sm font-bold mt-0.5">
+                            پنو توروالدز بعد از ۳۰ سال، Rust را رسماً به عنوان «زبان دوم توسعه کرنل لینوکس» پذیرفت.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="animate-item delay-3 glass-card p-3.5 sm:p-5 rounded-2xl flex items-center gap-3 sm:gap-5 border-r-6 border-r-blue-500">
+                    <div class="p-2.5 sm:p-3.5 bg-slate-200 dark:bg-slate-800 rounded-xl text-blue-600 dark:text-blue-400 shrink-0">
+                        <!-- Inline SVG: App Window -->
+                        <svg class="w-6 h-6 sm:w-7 sm:h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="2" y="4" width="20" height="16" rx="2"></rect>
+                            <line x1="10" y1="4" x2="10" y2="20"></line>
+                            <line x1="2" y1="9" x2="22" y2="9"></line>
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 class="text-sm sm:text-lg font-black text-slate-900 dark:text-white">ویندوز مایکروسافت (Windows Kernel)</h3>
+                        <p class="text-slate-900 dark:text-slate-100 text-xs sm:text-sm font-bold mt-0.5">
+                            مایکروسافت در حال بازنویسی کتابخانه‌های کلیدی مثل Win32k با Rust برای حذف صفحه مرگ (BSOD) است.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="animate-item delay-4 glass-card p-3.5 sm:p-5 rounded-2xl flex items-center gap-3 sm:gap-5 border-r-6 border-r-orange-500">
+                    <div class="p-2.5 sm:p-3.5 bg-slate-200 dark:bg-slate-800 rounded-xl text-orange-600 dark:text-orange-400 shrink-0">
+                        <!-- Inline SVG: Layers -->
+                        <svg class="w-6 h-6 sm:w-7 sm:h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                            <polyline points="2 17 12 22 22 17"></polyline>
+                            <polyline points="2 12 12 17 22 12"></polyline>
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 class="text-sm sm:text-lg font-black text-slate-900 dark:text-white">سیستم‌عامل Redox OS</h3>
+                        <p class="text-slate-900 dark:text-slate-100 text-xs sm:text-sm font-bold mt-0.5">
+                            یک سیستم‌عامل میکروکرنل جدید که ۱۰۰٪ کدهای آن از صفر با Rust نوشته شده است.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SLIDE 6: Conclusion -->
+        <div class="slide flex-col justify-center w-full my-auto space-y-4 sm:space-y-6 py-2">
+            <div class="animate-item delay-1 border-r-6 sm:border-r-8 border-emerald-500 pr-3 sm:pr-5">
+                <span class="text-emerald-600 dark:text-emerald-400 text-xs sm:text-sm font-black uppercase tracking-wider">جمع‌بندی</span>
+                <h2 class="text-xl sm:text-3xl md:text-4xl font-black text-slate-900 dark:text-white mt-1">آینده سیستم‌های عامل چطور خواهد بود؟</h2>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+                <div class="animate-item delay-2 glass-card p-5 sm:p-7 rounded-2xl sm:rounded-3xl space-y-3 border-t-4 border-t-emerald-500">
+                    <h3 class="text-lg sm:text-2xl font-black text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
+                        <svg class="w-5 h-5 sm:w-6 sm:h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                        دستاوردهای کلیدی
+                    </h3>
+                    <p class="text-slate-900 dark:text-slate-100 text-xs sm:text-base font-bold leading-relaxed">
+                        سوئیچ به سمت Rust یعنی عبور از عصر <strong>«سرعت به قیمت بی‌ثباتی»</strong> و ورود به عصر <strong>«امنیت تضمین شده بدون افت سرعت»</strong>.
+                    </p>
+                    <p class="text-slate-800 dark:text-slate-200 text-xs sm:text-sm font-bold">
+                        در آینده سیستم‌عامل‌ها ناپایداری کمتر، کرش‌های نادرتر و امنیت بالاتری در برابر نفوذ هکرها خواهند داشت.
+                    </p>
+                </div>
+
+                <div class="animate-item delay-3 glass-card p-5 sm:p-7 rounded-2xl sm:rounded-3xl space-y-3 border-t-4 border-t-orange-500">
+                    <h3 class="text-lg sm:text-2xl font-black text-orange-600 dark:text-orange-400 flex items-center gap-2">
+                        <!-- Inline SVG: Help Circle -->
+                        <svg class="w-5 h-5 sm:w-6 sm:h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                        </svg>
+                        پاسخ سریع به سوالات استاد
+                    </h3>
+                    <div class="text-xs sm:text-sm space-y-2 text-slate-900 dark:text-slate-100 font-bold">
+                        <p><strong>چرا C کلاً حذف نمی‌شود؟</strong> به خاطر ۳۰ سال کد قدیمی (Legacy)؛ تغییر یکباره غیرممکن است اما شروع شده.</p>
+                        <p><strong>آیا Rust کندتر است؟</strong> خیر، از نظر سرعت و مصرف حافظه کاملاً با C رقابت می‌کند.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="animate-item delay-4 text-center pt-2 sm:pt-4">
+                <p class="text-2xl sm:text-4xl font-black text-orange-600 dark:text-orange-400">با تشکر از توجه شما 🙏</p>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Presenter Notes Drawer -->
+    <div id="presenter-drawer" class="ios-popup fixed bottom-20 sm:bottom-24 left-1/2 w-11/12 max-w-3xl glass-card border-2 border-orange-500/80 p-4 sm:p-5 rounded-2xl sm:rounded-3xl shadow-2xl z-30">
+        <div class="flex justify-between items-center mb-2 pb-2 border-b border-slate-300 dark:border-slate-800">
+            <span class="text-xs sm:text-sm font-black text-orange-600 dark:text-orange-400 flex items-center gap-2">
+                <!-- Inline SVG: Mic -->
+                <svg class="w-4 h-4 sm:w-5 sm:h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                    <line x1="12" y1="19" x2="12" y2="23"></line>
+                    <line x1="8" y1="23" x2="16" y2="23"></line>
+                </svg>
+                راهنمای ارائه‌‌دهنده (متن سخنرانی اسلاید)
+            </span>
+            <button onclick="toggleNotes()" class="text-slate-600 dark:text-slate-400 hover:text-orange-500 text-xs sm:text-sm font-black p-1 transition-transform active:scale-95">بستن ✕</button>
+        </div>
+        <p id="presenter-text" class="text-slate-900 dark:text-slate-100 text-xs sm:text-base font-bold leading-relaxed max-h-40 overflow-y-auto">
+            <!-- Dynamic text filled by JS -->
+        </p>
+    </div>
+
+    <!-- Password Modal -->
+    <div id="pass-modal" aria-hidden="false">
+        <div role="dialog" class="glass-card w-11/12 max-w-sm p-5 sm:p-6 rounded-2xl sm:rounded-3xl border-2 border-orange-500/80 shadow-2xl">
+            <div class="flex items-center gap-2 mb-3 text-orange-600 dark:text-orange-400 font-black text-sm sm:text-base">
+                <!-- Inline SVG: Lock -->
+                <svg class="w-4 h-4 sm:w-5 sm:h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                </svg>
+                ورود به متن سخنرانی
+            </div>
+            <p class="text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-300 mb-3">برای مشاهده متن سخنرانی، رمز را وارد کنید.</p>
+            <input id="pass-input" type="password" inputmode="numeric" autocomplete="off" placeholder="••••••••••"
+                class="w-full px-3 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-center font-black tracking-[0.3em] outline-none focus:border-orange-500 transition-all" />
+            <p id="pass-error" class="hidden text-xs font-black text-red-600 dark:text-red-400 mt-2">رمز اشتباه است</p>
+            <div class="flex gap-2 mt-4">
+                <button id="pass-submit" class="flex-1 py-2.5 rounded-xl bg-gradient-to-tr from-orange-600 to-amber-500 text-white font-black text-sm hover:opacity-90 transition-all">ورود</button>
+                <button id="pass-cancel" class="flex-1 py-2.5 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-100 font-black text-sm border border-slate-300 dark:border-slate-700 transition-all">انصراف</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Navigation Controls Bar -->
+    <footer class="w-full px-3 sm:px-6 py-2 sm:py-3.5 border-t border-slate-300 dark:border-slate-800/80 bg-white/95 dark:bg-slate-950/90 backdrop-blur-xl flex justify-between items-center z-20 shrink-0">
+        <button id="notes-btn" onclick="requestNotes()" class="flex items-center gap-1.5 text-xs font-black px-2.5 py-2 sm:px-4 sm:py-2.5 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 hover:bg-orange-500 hover:text-white transition-all border border-slate-300 dark:border-slate-700">
+            <!-- Inline SVG: File Text -->
+            <svg class="w-4 h-4 text-orange-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="16" y1="13" x2="8" y2="13"></line>
+                <line x1="16" y1="17" x2="8" y2="17"></line>
+                <polyline points="10 9 9 9 8 9"></polyline>
+            </svg>
+            <span class="hidden sm:inline">متن سخنرانی (N)</span>
+            <span class="sm:hidden">متن</span>
+        </button>
+
+        <div class="flex items-center gap-2 sm:gap-4">
+            <button onclick="prevSlide()" class="p-2 sm:p-3 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-slate-100 hover:bg-orange-600 hover:text-white transition-all border border-slate-300 dark:border-slate-700 disabled:opacity-30" id="prev-btn">
+                <svg class="w-5 h-5 sm:w-6 sm:h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            </button>
+            <div class="flex gap-1.5" id="dots-container">
+                <!-- Dots generated by JS -->
+            </div>
+            <button onclick="nextSlide()" class="p-2 sm:p-3 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-slate-100 hover:bg-orange-600 hover:text-white transition-all border border-slate-300 dark:border-slate-700 disabled:opacity-30" id="next-btn">
+                <svg class="w-5 h-5 sm:w-6 sm:h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+            </button>
+        </div>
+
+        <span class="text-xs font-bold text-slate-600 dark:text-slate-400 hidden lg:inline">
+            راهنما: کلیدهای ➔ / ⬅ کیبورد
+        </span>
+    </footer>
+
+    <script>
+        const speakerNotes = [
+            /* Slide 1 */ "«سلام به استاد و بچه‌های کلاس. موضوعی که امروز می‌خوایم راجع بهش صحبت کنیم، یکی از بزرگ‌ترین تحولات چند دهه اخیر تو دنیای سیستم‌های عامله. همه‌‌مون می‌دونیم که از ۵۰ سال پیش تا الان، سلطان بی‌رقیب توسعه سیستم‌عامل زبان C بوده. اما امروز می‌خوایم ببینیم چرا این غول قدیمی داره جاش رو به زبان Rust میده.»",
+            /* Slide 2 */ "«خب، چرا از اول رفتن سراغ C؟ چون C به شما سرعت فوق‌العاده و دسترسی مستقیم به RAM میده. اما مشکل اینجاست که تو زبان C، مدیریت حافظه کاملاً دست برنامه‌نویسه. حالا کافیه یه جا برنامه‌نویس اشتباه کنه تا باگ‌های خطیر حافظه مثل Buffer Overflow رخ بده.»",
+            /* Slide 3 */ "«شاید بگید خب برنامه‌نویس‌های مایکروسافت و گوگل که نوب نیستن! اما آمار رسمی خود مایکروسافت و گوگل نشون میده که سالانه بیش از ۷۰ درصد از باگ‌های امنیتی و کرش‌های سیستم‌عامل‌ها دقیقاً بخاطر همین اشتباهات انسانی تو مدیریت حافظه‌ست.»",
+            /* Slide 4 */ "«اینجاست که Rust وارد بازی میشه. زبان‌های دیگه‌ای مثل پایتون هم امنیت حافظه دارن ولی سرعت رو پایین میارن. جادوی Rust اینه که بدون افت سرعت و تو همون لحظه‌ای که داری کد رو کامپایل می‌کنی، تمام خطاهای حافظه رو قبل از اجرای برنامه می‌گیره!»",
+            /* Slide 5 */ "«حالا آیا این فقط یه ایده تئوریکه؟ اصلاً! از لینوکس ۶.۱ به بعد، پنو توروالدز رسماً Rust رو به عنوان زبان دوم هسته لینوکس پذیرفت. مایکروسافت هم داره بخش‌های حساس ویندوز رو با Rust بازنویسی می‌کنه و سیستم‌عامل‌هایی مثل Redox OS کلاً رو پایه Rust بنا شدن.»",
+            /* Slide 6 */ "«در نهایت، سوئیچ کردن به Rust باعث میشه سیستم‌عامل‌های آینده، بی‌ثباتی کمتر، کرش‌های نادرتر و امنیت بسیار بالاتری داشته باشن بدون اینکه ذره‌ای از سرعت سخت‌‌افزار هدر بره. ممنون از توجهتون.»"
+        ];
+
+        let currentSlide = 0;
+        const slides = document.querySelectorAll('.slide');
+        const progressBar = document.getElementById('progress-bar');
+        const slideCounter = document.getElementById('slide-counter');
+        const presenterText = document.getElementById('presenter-text');
+        const dotsContainer = document.getElementById('dots-container');
+
+        const canvas = document.getElementById('particle-canvas');
+        const ctx = canvas.getContext('2d');
+        let particles = [];
+        const particleCount = window.innerWidth < 640 ? 25 : 45;
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        class Particle {
+            constructor() {
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() * canvas.height;
+                this.vx = (Math.random() - 0.5) * 0.7;
+                this.vy = (Math.random() - 0.5) * 0.7;
+                this.radius = Math.random() * 2 + 1;
+            }
+
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+
+                if (this.x < 0 || this.x > canvas.width) this.vx *= -1;
+                if (this.y < 0 || this.y > canvas.height) this.vy *= -1;
+            }
+
+            draw(isDark) {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = isDark ? 'rgba(249, 115, 22, 0.6)' : 'rgba(234, 88, 12, 0.5)';
+                ctx.fill();
+            }
+        }
+
+        for (let i = 0; i < particleCount; i++) {
+            particles.push(new Particle());
+        }
+
+        function animateParticles() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const isDark = document.documentElement.classList.contains('dark');
+
+            for (let i = 0; i < particles.length; i++) {
+                particles[i].update();
+                particles[i].draw(isDark);
+
+                for (let j = i + 1; j < particles.length; j++) {
+                    const dx = particles[i].x - particles[j].x;
+                    const dy = particles[i].y - particles[j].y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+
+                    if (dist < 110) {
+                        ctx.beginPath();
+                        ctx.moveTo(particles[i].x, particles[i].y);
+                        ctx.lineTo(particles[j].x, particles[j].y);
+                        ctx.strokeStyle = isDark 
+                            ? `rgba(249, 115, 22, ${0.15 - dist / 900})`
+                            : `rgba(234, 88, 12, ${0.12 - dist / 1000})`;
+                        ctx.lineWidth = 1;
+                        ctx.stroke();
+                    }
+                }
+            }
+            requestAnimationFrame(animateParticles);
+        }
+        animateParticles();
+
+        slides.forEach((_, idx) => {
+            const dot = document.createElement('div');
+            dot.className = `h-2 sm:h-2.5 rounded-full transition-all duration-300 cursor-pointer ${idx === 0 ? 'bg-orange-500 w-6 sm:w-8' : 'bg-slate-400 dark:bg-slate-700 w-2 sm:w-2.5'}`;
+            dot.onclick = () => goToSlide(idx);
+            dotsContainer.appendChild(dot);
+        });
+
+        function updateSlide() {
+            slides.forEach((slide, idx) => {
+                if (idx === currentSlide) {
+                    slide.classList.add('active');
+                } else {
+                    slide.classList.remove('active');
+                }
+            });
+
+            // Update Progress Bar & Text Counter
+            const progress = ((currentSlide + 1) / slides.length) * 100;
+            progressBar.style.width = `${progress}%`;
+            slideCounter.innerText = `${currentSlide + 1} از ${slides.length}`;
+            presenterText.innerText = speakerNotes[currentSlide];
+
+            // Update Pagination Dots
+            const dots = dotsContainer.children;
+            Array.from(dots).forEach((dot, idx) => {
+                if (idx === currentSlide) {
+                    dot.className = 'w-6 sm:w-8 h-2 sm:h-2.5 rounded-full bg-orange-500 transition-all duration-300';
+                } else {
+                    dot.className = 'w-2 sm:w-2.5 h-2 sm:h-2.5 rounded-full bg-slate-400 dark:bg-slate-700 transition-all duration-300';
+                }
+            });
+
+            // Toggle Navigation Buttons state
+            document.getElementById('prev-btn').disabled = currentSlide === 0;
+            document.getElementById('next-btn').disabled = currentSlide === slides.length - 1;
+        }
+
+        function nextSlide() {
+            if (currentSlide < slides.length - 1) {
+                currentSlide++;
+                updateSlide();
+            }
+        }
+
+        function prevSlide() {
+            if (currentSlide > 0) {
+                currentSlide--;
+                updateSlide();
+            }
+        }
+
+        function goToSlide(index) {
+            currentSlide = index;
+            updateSlide();
+        }
+
+        function toggleNotes() {
+            const drawer = document.getElementById('presenter-drawer');
+            const btn = document.getElementById('notes-btn');
+
+            if (!drawer.classList.contains('active')) {
+                // Compute coordinates relative to the button for dynamic origin
+                const btnRect = btn.getBoundingClientRect();
+                const drawerWidth = drawer.offsetWidth || (window.innerWidth * 0.91);
+                const drawerHeight = drawer.offsetHeight || 180;
+
+                const drawerLeft = (window.innerWidth - drawerWidth) / 2;
+                const drawerBottomOffset = window.innerWidth < 640 ? 80 : 96;
+                const drawerTop = window.innerHeight - drawerBottomOffset - drawerHeight;
+
+                const originX = (btnRect.left + btnRect.width / 2) - drawerLeft;
+                const originY = (btnRect.top + btnRect.height / 2) - drawerTop;
+
+                drawer.style.transformOrigin = `${originX}px ${originY}px`;
+                drawer.classList.add('active');
+            } else {
+                drawer.classList.remove('active');
+            }
+        }
+
+        const NOTES_PASSWORD = '09103830913';
+        let notesUnlocked = false;
+
+        function requestNotes() {
+            const drawer = document.getElementById('presenter-drawer');
+            // Closing, or already unlocked: no password needed
+            if (drawer.classList.contains('active') || notesUnlocked) {
+                toggleNotes();
+                return;
+            }
+            openPassModal();
+        }
+
+        function openPassModal() {
+            const modal = document.getElementById('pass-modal');
+            const input = document.getElementById('pass-input');
+            document.getElementById('pass-error').classList.add('hidden');
+            input.value = '';
+            modal.classList.add('open');
+            setTimeout(() => input.focus(), 50);
+        }
+
+        function closePassModal() {
+            document.getElementById('pass-modal').classList.remove('open');
+        }
+
+        function submitPass() {
+            const input = document.getElementById('pass-input');
+            if (input.value.trim() === NOTES_PASSWORD) {
+                notesUnlocked = true;
+                closePassModal();
+                toggleNotes();
+            } else {
+                document.getElementById('pass-error').classList.remove('hidden');
+                input.value = '';
+                input.focus();
+            }
+        }
+
+        document.getElementById('pass-submit').addEventListener('click', submitPass);
+        document.getElementById('pass-cancel').addEventListener('click', closePassModal);
+        document.getElementById('pass-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'pass-modal') closePassModal();
+        });
+        document.getElementById('pass-input').addEventListener('keydown', (e) => {
+            e.stopPropagation();
+            if (e.key === 'Enter') submitPass();
+            if (e.key === 'Escape') closePassModal();
+        });
+
+        function toggleTheme() {
+            const html = document.documentElement;
+            const sunIcon = document.getElementById('sun-icon');
+            const moonIcon = document.getElementById('moon-icon');
+            const themeText = document.getElementById('theme-text');
+
+            if (html.classList.contains('dark')) {
+                html.classList.remove('dark');
+                sunIcon.classList.add('hidden');
+                moonIcon.classList.remove('hidden');
+                if (themeText) themeText.innerText = 'حالت شب';
+            } else {
+                html.classList.add('dark');
+                moonIcon.classList.add('hidden');
+                sunIcon.classList.remove('hidden');
+                if (themeText) themeText.innerText = 'حالت روز';
+            }
+        }
+
+        function toggleFullScreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(err => console.log(err));
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                }
+            }
+        }
+
+        let touchStartX = 0;
+        let touchEndX = 0;
+
+        document.addEventListener('touchstart', (e) => {
+            touchStartX = e.changedTouches[0].screenX;
+        }, false);
+
+        document.addEventListener('touchend', (e) => {
+            touchEndX = e.changedTouches[0].screenX;
+            handleSwipe();
+        }, false);
+
+        function handleSwipe() {
+            const swipeThreshold = 50;
+            if (touchEndX < touchStartX - swipeThreshold) {
+                nextSlide(); // RTL Swipe Left -> Next
+            }
+            if (touchEndX > touchStartX + swipeThreshold) {
+                prevSlide(); // RTL Swipe Right -> Prev
+            }
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowLeft' || e.key === 'Space') {
+                nextSlide(); // RTL Direction
+            } else if (e.key === 'ArrowRight') {
+                prevSlide(); // RTL Direction
+            } else if (e.key === 'n' || e.key === 'N') {
+                requestNotes();
+            }
+        });
+
+        // Initialize First Slide
+        updateSlide();
+    </script>
+</body>
+</html>
